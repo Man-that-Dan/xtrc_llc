@@ -86,7 +86,7 @@ class MotorController(Node):
         else:
             self.drive.ChangeDutyCycle(self.velocity)
 
-    def pulse_motor(self){
+    def pulse_motor(self):
         if self.dir > 0:
             GPIO.output(self.drive_in1,GPIO.LOW)
             GPIO.output(self.drive_in2,GPIO.HIGH)
@@ -97,7 +97,6 @@ class MotorController(Node):
         GPIO.output(self.drive_in1,GPIO.LOW)
         GPIO.output(self.drive_in2,GPIO.LOW)
         self.create_timer(self.pulse_interval, self.pulse_motor)
-    }
 
 
 
