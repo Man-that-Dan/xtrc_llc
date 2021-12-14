@@ -12,15 +12,18 @@ class MotorController(Node):
         self.subscriber_ = self.create_subscription(
             Twist, "/cmd_vel", self.operate_motors, 10)
         self.get_logger().info("motor controller init")
+
+        #mins and parameters
         self.drive_in1 = 5
         self.drive_in2 = 4
         self.steer_in1 = 3
         self.steer_in2 = 2
         self.drive_en = 19
-        self.steering_en = 13
+        self.steer_en = 13
         self.range = 90
         self.max_duty_cycle = 90
-        self.min_duty_cycle = 30
+        self.min_effective_duty_cycle = 30
+        self.min_duty_cycle = 6
 
         #setup pins for driving motor
         GPIO.setmode(GPIO.BCM)
@@ -51,22 +54,22 @@ class MotorController(Node):
     # so velocity here is just a range of possible output
     # this particular model also has a brushed motor controlling the steering instead of a servo so I'm approximating steering with that too
     def operate_motors(self, msg):
-        if self.timer:
-            self.destroy_timer(self.timer)
-        self.get_logger().debug(msg.data)
+        self.get_logger().debug(msg)
         self.dir = 1
-        self.velocity = msg.data.linear.x * self.max_duty_cycle
+        self.velocity = msg.linear.x * self.max_duty_cycle
         if self.velocity < 0:
             self.dir = -1
             self.velocity = self.velocity * -1
 
         steering_dir = 1
-        steering_angle = msg.data.angular.z * self.max_duty_cycle
+        steering_angle = msg.angular.z * self.max_duty_cycle
         if steering_angle < 0:
             steering_dir = -1
             steering_angle = steering_angle * -1
 
         self.steer.ChangeDutyCycle(steering_angle)
+
+        #set steering direction
         if steering_angle == 0:
             GPIO.output(self.steer_in1,GPIO.LOW)
             GPIO.output(self.steer_in2,GPIO.LOW)
@@ -77,29 +80,41 @@ class MotorController(Node):
             GPIO.output(self.steer_in1,GPIO.HIGH)
             GPIO.output(self.steer_in2,GPIO.LOW)
 
-        #since the motor can't overcome its inertia below certain speeds just 
-        #pulse the minimum duty cycle with a frequency proportional to desired velocity
-        if velocity < self.min_duty_cycle:
-            self.drive.ChangeDutyCycle(self.min_duty_cycle)
-            self.pulse_interval = 1 - (self.velocity / self.min_duty_cycle)
-            self.create_timer(self.pulse_interval, self.pulse_motor)
-        else:
-            self.drive.ChangeDutyCycle(self.velocity)
+        #motor just cannot spin below this duty cycle so just stop
+        if self.velocity < self.min_duty_cycle:
+            self.velocity = 0
 
-    def pulse_motor(self):
-        if self.dir > 0:
+        drive_1 = GPIO.input(self.drive_in1)
+        drive_2 = GPIO.input(self.drive_in2)
+
+        if self.dir > 0 and self.velocity > 0.1:
+            #move forward
             GPIO.output(self.drive_in1,GPIO.LOW)
             GPIO.output(self.drive_in2,GPIO.HIGH)
+        elif self.velocity < 0.1:
+            #stop
+            GPIO.output(self.drive_in1,GPIO.LOW)
+            GPIO.output(self.drive_in2,GPIO.LOW)
         else:
+            #reverse
             GPIO.output(self.drive_in1,GPIO.HIGH)
             GPIO.output(self.drive_in2,GPIO.LOW)
-        sleep(0.25)
-        GPIO.output(self.drive_in1,GPIO.LOW)
-        GPIO.output(self.drive_in2,GPIO.LOW)
-        self.create_timer(self.pulse_interval, self.pulse_motor)
 
+        drive_1_new = GPIO.input(self.drive_in1)
+        drive_2_new = GPIO.input(self.drive_in2)
 
-
+        #if changing directions or starting up and speed a little low give a little push
+        if self.velocity < self.min_effective_duty_cycle and self.velocity > 0:
+            if drive_1 != drive_1_new or drive_2 != drive_2_new:
+                self.drive.ChangeDutyCycle(self.max_duty_cycle)
+                sleep(0.25)
+                self.drive.ChangeDutyCycle(self.velocity)
+            else:
+                self.drive.ChangeDutyCycle(self.velocity)
+        else:
+            #else just set speed
+            self.drive.ChangeDutyCycle(self.velocity)
+            
 def main(args=None):
     rclpy.init(args=args)
     node = MotorController()
