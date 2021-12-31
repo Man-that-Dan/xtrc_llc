@@ -21,8 +21,8 @@ class MotorController(Node):
         self.drive_en = 19
         self.steer_en = 13
         self.range = 90
-        self.max_duty_cycle = 90
-        self.min_effective_duty_cycle = 30
+        self.max_duty_cycle = 100
+        self.min_effective_duty_cycle = 45
         self.min_duty_cycle = 6
 
         #setup pins for driving motor
@@ -66,14 +66,15 @@ class MotorController(Node):
         if steering_angle < 0:
             steering_dir = -1
             steering_angle = steering_angle * -1
-
+        if steering_angle > 100:
+            steering_angle = 100
         self.steer.ChangeDutyCycle(steering_angle)
 
         #set steering direction
         if steering_angle == 0:
             GPIO.output(self.steer_in1,GPIO.LOW)
             GPIO.output(self.steer_in2,GPIO.LOW)
-        elif steering_dir > 0:
+        elif steering_dir < 0:
             GPIO.output(self.steer_in1,GPIO.LOW)
             GPIO.output(self.steer_in2,GPIO.HIGH)
         else:
